@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>HydraHelp — Water Conservation Chatbot</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root{
+      --bg:#f3f7fb; --card:#ffffff; --accent:#0b74d1; --muted:#6b7280; --success:#16a34a;
+      --bot:#eef6ff; --user:#2b6cb0; --danger:#b91c1c;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial;background:var(--bg);color:#0f172a}
+    .app{padding:18px;min-height:100vh}
+    header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+    h1{margin:0;font-size:20px}
+    .sub{color:var(--muted);font-size:13px;margin-top:6px}
+    .layout{display:flex;gap:12px;align-items:flex-start}
+    .chat{flex:1;min-width:320px;display:flex;flex-direction:column}
+    .side{width:360px}
+    .card{background:var(--card);padding:12px;border-radius:10px;box-shadow:0 1px 2px rgba(0,0,0,0.04);margin-bottom:12px}
+    .chat-window{height:60vh;min-height:420px;background:linear-gradient(180deg,#fff,#f6fbff);padding:12px;border-radius:8px;border:1px solid #e6eef8;overflow:auto}
+    .msg-row{display:flex;margin-bottom:10px;align-items:flex-end}
+    .msg-row.bot{justify-content:flex-start}
+    .msg-row.user{justify-content:flex-end}
+    .bubble{max-width:76%;padding:10px 12px;border-radius:12px;line-height:1.4;white-space:pre-wrap;box-shadow:0 1px 0 rgba(0,0,0,0.03)}
+    .bot .bubble{background:var(--bot);color:#0f172a}
+    .user .bubble{background:var(--user);color:white}
+    .meta{font-size:11px;color:var(--muted);margin-top:6px}
+    .input-bar{display:flex;margin-top:8px;gap:8px;align-items:center}
+    .input-bar input[type="text"]{flex:1;padding:10px;border-radius:8px;border:1px solid #dfe8f4}
+    .input-bar button{padding:10px 14px;border-radius:8px;border:0;background:var(--accent);color:#fff;cursor:pointer}
+    .helpers{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+    .helpers button{background:#fff;border:1px solid #d0e4ff;padding:6px 10px;border-radius:6px;cursor:pointer}
+    label{display:block;font-size:13px;margin-top:8px}
+    input[type=number],select,input[type=text]{width:100%;padding:8px;border-radius:6px;border:1px solid #e6eef8;margin-top:6px}
+    .muted{color:var(--muted)}
+    .recs ul{list-style:none;margin:0;padding:0}
+    .rec-item{padding:10px;border-radius:8px;border:1px solid #eef6ff;margin-bottom:8px}
+    .rec-title{font-weight:600}
+    .small{font-size:12px;color:var(--muted)}
+    .topbar{display:flex;gap:8px;align-items:center}
+    .apikey{display:flex;gap:6px;align-items:center}
+    .apikey input{padding:8px;border-radius:8px;border:1px solid #d0e4ff}
+    .toggle{display:flex;align-items:center;gap:6px}
+    .footer{margin-top:12px;color:var(--muted);font-size:13px}
+    .danger{color:var(--danger);font-weight:600}
+    .export-btn{background:var(--success);color:white;border:0;padding:8px 10px;border-radius:8px;cursor:pointer}
+    .small-btn{background:#fff;border:1px solid #e6eef8;padding:6px 10px;border-radius:6px;cursor:pointer}
+    .top-note{font-size:12px;color:var(--muted);margin-top:6px}
+    @media (max-width:980px){ .layout{flex-direction:column} .side{width:100%} .chat-window{height:50vh} header{flex-direction:column;align-items:flex-start} }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div>
+        <h1>HydraHelp — Water Conservation Chatbot</h1>
+        <div class="sub">Teaching communities about water-saving methods, sanitation, and action plans.</div>
+      </div>
+
+      <div class="topbar">
+        <div class="apikey card" style="display:flex;flex-direction:column;">
+          <label class="small" style="margin:0">OpenAI API Key (optional)</label>
+          <input id="apiKey" type="text" placeholder="sk-... (keep private)" style="width:260px" />
+          <div class="top-note">Paste key only if you understand it will be used in this browser session. For production, use a server proxy.</div>
+        </div>
+
+        <div class="toggle card" style="padding:8px 12px;">
+          <label class="small" style="margin:0">Use AI</label>
+          <input id="useAi" type="checkbox" />
+        </div>
+
+        <div style="display:flex;flex-direction:column;align-items:flex-end;">
+          <button id="exportBtn" class="export-btn" title="Export conversation">Export</button>
+          <div class="small muted" style="margin-top:6px;font-size:11px">Local-first; optional AI integration</div>
+        </div>
+      </div>
+    </header>
+
+    <div class="layout">
+      <!-- Chat -->
+      <div class="chat card">
+        <div id="chatWindow" class="chat-window" aria-live="polite"></div>
+
+        <form id="chatForm" class="input-bar" onsubmit="return false;">
+          <input id="chatInput" type="text" autocomplete="off" placeholder="Ask: 'How to save water in a village?', 'Leak fix steps', 'School activity'..." />
+          <button id="sendBtn">Send</button>
+        </form>
+
+        <div class="helpers">
+          <button class="small-btn" id="btnTips">Community Tips</button>
+          <button class="small-btn" id="btnHouse">Household Tips</button>
+          <button class="small-btn" id="btnSchool">School Lesson</button>
+          <button class="small-btn" id="btnRain">Rainwater How-to</button>
+          <button class="small-btn" id="btnGrey">Greywater Basics</button>
+        </div>
+      </div>
+
+      <!-- Sidebar -->
+      <aside class="side">
+        <section class="card">
+          <h3>Context (optional)</h3>
+          <label>Community type
+            <select id="communityType">
+              <option value="urban">Urban</option>
+              <option value="rural">Rural</option>
+              <option value="peri-urban">Peri-urban</option>
+              <option value="school">School / Educational</option>
+              <option value="ngo">NGO / Community Org</option>
+            </select>
+          </label>
+
+          <label>Region / Climate
+            <input id="region" type="text" placeholder="e.g., arid, monsoon-prone, temperate" />
+          </label>
+
+          <label>Water availability
+            <select id="availability">
+              <option value="ample">Ample</option>
+              <option value="moderate" selected>Moderate</option>
+              <option value="scarce">Scarce</option>
+            </select>
+          </label>
+
+          <div style="margin-top:12px">
+            <button id="clearBtn" class="small-btn">Clear Conversation</button>
+            <div class="top-note">Profile & chat are saved in your browser (localStorage).</div>
+          </div>
+        </section>
+
+        <section class="card">
+          <h3>Quick Resources</h3>
+          <div class="small">Use quick buttons to get structured answers. Toggle Use AI for richer replies (if API key provided).</div>
+          <ul style="margin-top:8px;padding-left:18px" class="small">
+            <li>Leak detection & low-cost fixes</li>
+            <li>Rainwater harvesting basics & first-flush</li>
+            <li>Greywater reuse for gardens (non-edible)</li>
+            <li>Community outreach templates & school plans</li>
+          </ul>
+        </section>
+
+        <section class="card">
+          <h3>Last snapshot</h3>
+          <div id="lastSnapshot" class="small muted">No replies yet.</div>
+        </section>
+      </aside>
+    </div>
+
+    <div class="footer">
+      <div class="small muted">Prototype for outreach and education only. For technical installations consult local water/sanitation professionals.</div>
+    </div>
+  </div>
+
+  <script>
+  /* ---------------------------
+     HydraHelp — Single-file app
+     - Local fallback responder
+     - Optional OpenAI chat completions (client-side)
+     - localStorage persistence & export
+     --------------------------- */
+
+  // DOM
+  const chatWindow = document.getElementById('chatWindow');
+  const chatInput = document.getElementById('chatInput');
+  const sendBtn = document.getElementById('sendBtn');
+  const btnTips = document.getElementById('btnTips');
+  const btnHouse = document.getElementById('btnHouse');
+  const btnSchool = document.getElementById('btnSchool');
+  const btnRain = document.getElementById('btnRain');
+  const btnGrey = document.getElementById('btnGrey');
+  const apiKeyEl = document.getElementById('apiKey');
+  const useAiEl = document.getElementById('useAi');
+  const exportBtn = document.getElementById('exportBtn');
+  const clearBtn = document.getElementById('clearBtn');
+  const communityType = document.getElementById('communityType');
+  const regionInput = document.getElementById('region');
+  const availability = document.getElementById('availability');
+  const lastSnapshot = document.getElementById('lastSnapshot');
+
+  // state persisted in localStorage
+  const STORAGE_KEY = 'hydrahelp_state_v1';
+  let state = {
+    messages: [], // {from:'bot'|'user', text, ts}
+    profile: {
+      communityType: 'urban',
+      region: '',
+      availability: 'moderate'
+    }
+  };
+
+  // load saved
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) state = JSON.parse(saved);
+  } catch (e) { console.warn('load storage', e); }
+
+  // helpers
+  function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+  function timeStamp() { return new Date().toLocaleString(); }
+
+  function renderMessages() {
+    chatWindow.innerHTML = '';
+    state.messages.forEach(msg => {
+      const row = document.createElement('div');
+      row.className = 'msg-row ' + (msg.from === 'bot' ? 'bot' : 'user');
+      const bubble = document.createElement('div');
+      bubble.className = 'bubble';
+      bubble.innerHTML = `<div>${escapeHtml(msg.text)}</div><div class="meta">${msg.from === 'bot' ? 'HydraHelp' : 'You'} • ${msg.ts}</div>`;
+      row.appendChild(bubble);
+      chatWindow.appendChild(row);
+    });
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+  }
+
+  function appendMessage(from, text) {
+    const msg = { from, text, ts: timeStamp() };
+    state.messages.push(msg);
+    saveState();
+    renderMessages();
+    try { lastSnapshot.textContent = text.split('\n').slice(0,3).join(' ').slice(0,200) + (text.length>200?'…':''); } catch {}
+  }
+
+  function escapeHtml(str) {
+    return str.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  }
+
+  // Seed greeting if empty
+  if (state.messages.length === 0) {
+    appendMessage('bot', `Hello — I am HydraHelp. I can provide water-saving methods, sanitation guidance, and community or school activity templates. Try: "How can a village collect rainwater?"`);
+  } else {
+    // reflect saved profile into UI
+    communityType.value = state.profile.communityType || 'urban';
+    regionInput.value = state.profile.region || '';
+    availability.value = state.profile.availability || 'moderate';
+    renderMessages();
+  }
+
+  // Local (rule-based) responder (fast fallback)
+  function localResponder(userText) {
+    const t = userText.toLowerCase();
+    if (/\b(tips|ways|how to save)\b/.test(t)) return generateTips();
+    if (/\brain|harvest|rainwater/.test(t)) return rainwaterAdvice();
+    if (/\bleak|drip|repair|fix\b/.test(t)) return leakAdvice();
+    if (/\bgrey|waste ?water|reuse\b/.test(t)) return greywaterAdvice();
+    if (/\bschool|lesson|kids|students\b/.test(t)) return schoolPlan();
+    if (/\bsanitation|toilet|hygiene\b/.test(t)) return sanitationAdvice();
+    if (/\bmeasure|monitor|audit\b/.test(t)) return auditAdvice();
+    // fallback
+    return `I can help with: leak fixes, rainwater harvesting, greywater reuse, school lesson plans, and sanitation best practices. Which would you like?`;
+  }
+
+  // Local content functions
+  function generateTips() {
+    const tips = [
+      "Fix leaks quickly — even small drips waste significant water over time.",
+      "Collect roof runoff in a covered drum for non-potable use like gardening.",
+      "Use buckets for washing vehicles and reuse the rinse water for plants.",
+      "Time irrigation for early morning/evening to reduce evaporation.",
+      "Use low-flow aerators and efficient fixtures to cut water flow without losing performance.",
+      "Teach children simple habits: turn off taps while brushing, report leaks.",
+      "Organize a neighborhood 'fix-it' day for common plumbing issues."
+    ];
+    return tips.sort(()=>0.5-Math.random()).slice(0,4).join('\n- ');
+  }
+
+  function rainwaterAdvice() {
+    return `Small rainwater harvesting (practical steps):
+1) Capture: route rooftop downpipes to a covered storage tank or drum.
+2) First flush: add a simple first-flush diverter to avoid dirty initial runoff entering the tank.
+3) Filter: use mesh and a simple sand/gravel filter before storage for garden use.
+4) Use: use stored water for gardening, cleaning, or percolation via soak pits.
+Note: For drinking water, proper filtration & treatment plus local permission are required.`;
+  }
+
+  function leakAdvice() {
+    return `Leak detection & quick fixes:
+- Check toilets: add a few drops of food coloring in cistern — if color appears in bowl, there's a leak.
+- Listen for drips at night. Tighten tap washers for small leaks.
+- For small pipe leaks use epoxy putty or rubber patch as a temporary fix; call a plumber for permanent repair.
+- Replace worn washers and loose connectors; use PTFE tape for threaded joints.`;
+  }
+
+  function greywaterAdvice() {
+    return `Greywater reuse (basics):
+- Greywater = water from baths, sinks, laundry (NOT toilets).
+- Use it for irrigation after a simple screening and avoiding edible crops.
+- Use low-phosphate, biodegradable soaps.
+- Start with laundry rinse water diverted to a soak bed or non-edible garden area.
+Safety: avoid direct contact and use protective measures when applying.`;
+  }
+
+  function schoolPlan() {
+    return `45-minute school lesson plan:
+1) Intro (10 min): water cycle & local shortages.
+2) Activity (20 min): water-use audit — students list where water is used and imagine savings.
+3) Demo (10 min): bucket vs. shower, leak demo with timer.
+4) Wrap-up (5 min): students commit to 2 actions for home/school.
+I can produce a printable worksheet if you'd like.`;
+  }
+
+  function sanitationAdvice() {
+    return `Sanitation best practices:
+- Ensure safe, functioning toilets with regular cleaning.
+- Promote handwashing with soap at critical times.
+- Manage sewage safely; de-sludge septic tanks periodically.
+- Address menstrual hygiene needs and safe disposal.
+For infrastructure upgrades, consult local sanitation experts.`;
+  }
+
+  function auditAdvice() {
+    return `Simple community water audit steps:
+1) Identify major water users (irrigation, toilets, leaks).
+2) Measure/estimate usage (buckets, meter readings).
+3) Prioritize quick wins (fix leaks, low-flow fixtures).
+4) Plan projects (small RWHS, soak pits) and estimate costs.
+Would you like a template spreadsheet for an audit?`;
+  }
+
+  // OpenAI call (client-side)
+  async function callOpenAI(userText) {
+    const apiKey = apiKeyEl.value.trim();
+    if (!apiKey) throw new Error('No API key provided.');
+
+    // build system prompt with profile
+    const system = `You are a helpful, concise water-conservation educator for communities. Use plain language, include low-cost DIY tips, sanitation advice, rainwater harvesting basics, and school activity templates. Personalize answers using: Community type: ${communityType.value}; Region: ${regionInput.value || 'unspecified'}; Water availability: ${availability.value}. End with one follow-up question to tailor next advice.`;
+
+    const body = {
+      model: 'gpt-4o-mini', // adjust if unavailable
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: userText }
+      ],
+      temperature: 0.2,
+      max_tokens: 700
+    };
+
+    const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + apiKey
+      },
+      body: JSON.stringify(body)
+    });
+
+    if (!resp.ok) {
+      const t = await resp.text();
+      throw new Error(`OpenAI error ${resp.status}: ${t}`);
+    }
+    const data = await resp.json();
+    const content = data.choices?.[0]?.message?.content;
+    return content || 'No response from model.';
+  }
+
+  // Conversation handler
+  async function processUser(inputText) {
+    appendMessage('user', inputText);
+    // show thinking placeholder
+    appendMessage('bot', 'Thinking...');
+
+    const useAi = useAiEl.checked;
+    if (useAi) {
+      try {
+        const aiReply = await callOpenAI(inputText);
+        // replace last bot 'Thinking...' with aiReply
+        state.messages.pop(); // remove Thinking
+        appendMessage('bot', aiReply);
+        saveState();
+      } catch (err) {
+        // remove Thinking, show error and fallback
+        state.messages.pop();
+        appendMessage('bot', `Error reaching AI: ${err.message}\nUsing local fallback response.`);
+        const fallback = localResponder(inputText);
+        appendMessage('bot', fallback);
+      }
+    } else {
+      // local fallback
+      state.messages.pop(); // remove Thinking
+      const local = localResponder(inputText);
+      appendMessage('bot', local);
+    }
+  }
+
+  // UI events
+  sendBtn.addEventListener('click', () => {
+    const text = chatInput.value.trim();
+    if (!text) return;
+    chatInput.value = '';
+    processUser(text);
+  });
+  chatInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendBtn.click(); }
+  });
+
+  btnTips.addEventListener('click', () => processUser('Give me community-level water conservation tips.'));
+  btnHouse.addEventListener('click', () => processUser('Give practical water-saving tips for households.'));
+  btnSchool.addEventListener('click', () => processUser('I need a 45-minute school lesson plan on water conservation for kids.'));
+  btnRain.addEventListener('click', () => processUser('How to set up a small rainwater harvesting system?'));
+  btnGrey.addEventListener('click', () => processUser('Basics of greywater reuse for gardening.'));
+
+  // export
+  exportBtn.addEventListener('click', () => {
+    const lines = state.messages.map(m => `${m.ts} - ${m.from.toUpperCase()}: ${m.text}`).join('\n\n');
+    const blob = new Blob([lines], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'hydrahelp_conversation.txt';
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  });
+
+  // clear
+  clearBtn.addEventListener('click', () => {
+    if (!confirm('Clear conversation and saved profile?')) return;
+    state.messages = [];
+    state.profile = { communityType: 'urban', region: '', availability: 'moderate' };
+    localStorage.removeItem(STORAGE_KEY);
+    // reload UI
+    communityType.value = 'urban'; regionInput.value=''; availability.value='moderate';
+    chatWindow.innerHTML = '';
+    appendMessage('bot', `Hello — I am HydraHelp. I can provide water-saving methods, sanitation guidance, and community or school activity templates.`);
+  });
+
+  // persist profile UI changes
+  communityType.addEventListener('change', () => { state.profile.communityType = communityType.value; saveState(); });
+  regionInput.addEventListener('input', () => { state.profile.region = regionInput.value; saveState(); });
+  availability.addEventListener('change', () => { state.profile.availability = availability.value; saveState(); });
+
+  // initial render
+  renderMessages();
+
+  // Expose a little debug API
+  window.HydraHelp = {
+    state,
+    saveState,
+    processUser,
+  };
+  </script>
+</body>
+</html>
